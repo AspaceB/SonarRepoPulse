@@ -1,0 +1,37 @@
+# Virtual environment
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# Local config with real URLs/credentials
+config.local.yaml
+sonar_key_mappings.local.yaml
+
+# Playwright SSO session state
+.sonar_session.json
+.bitbucket_session.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Generated reports
+reports/*.csv
+reports/*.xlsx
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude/

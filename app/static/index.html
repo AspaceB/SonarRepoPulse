@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SonarRepoPulse</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --pulse-primary: #6366f1;
+            --pulse-primary-hover: #4f46e5;
+            --pulse-bg: #f8fafc;
+            --pulse-card: #ffffff;
+            --pulse-border: #e2e8f0;
+        }
+        body { background: var(--pulse-bg); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        .navbar-brand { font-weight: 700; letter-spacing: -0.5px; }
+        .brand-icon { color: var(--pulse-primary); }
+        .card { border: 1px solid var(--pulse-border); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .card-header { background: transparent; border-bottom: 1px solid var(--pulse-border); font-weight: 600; }
+        .provider-btn { min-width: 140px; }
+        .provider-btn.active { background: var(--pulse-primary) !important; border-color: var(--pulse-primary) !important; }
+        .tree-container { max-height: 400px; overflow-y: auto; border: 1px solid var(--pulse-border); border-radius: 8px; padding: 0; }
+        .tree-project { border-bottom: 1px solid var(--pulse-border); }
+        .tree-project:last-child { border-bottom: none; }
+        .tree-project-header { padding: 10px 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; background: #f1f5f9; font-weight: 600; font-size: 0.9rem; }
+        .tree-project-header:hover { background: #e2e8f0; }
+        .tree-project-header .chevron { transition: transform 0.2s; font-size: 0.75rem; }
+        .tree-project-header .chevron.collapsed { transform: rotate(-90deg); }
+        .tree-repo-list { list-style: none; padding: 0; margin: 0; }
+        .tree-repo-item { padding: 6px 14px 6px 40px; display: flex; align-items: center; gap: 8px; font-size: 0.85rem; border-top: 1px solid #f1f5f9; }
+        .tree-repo-item:hover { background: #f8fafc; }
+        .tree-repo-item.hidden, .tree-project.hidden { display: none; }
+        .selection-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; background: #f1f5f9; border-radius: 8px; margin-top: 12px; }
+        .badge-count { background: var(--pulse-primary); color: white; font-size: 0.8rem; padding: 3px 10px; border-radius: 12px; }
+        .progress-section { display: none; }
+        .progress-section.active { display: block; }
+        .results-section { display: none; }
+        .results-section.active { display: block; }
+        .table th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; white-space: nowrap; }
+        .table td { vertical-align: middle; font-size: 0.875rem; }
+        .badge-coverage-high { background: #22c55e; }
+        .badge-coverage-mid { background: #f59e0b; }
+        .badge-coverage-low { background: #ef4444; }
+        .badge-no-sonar { background: #94a3b8; }
+        .rescan-input { display: inline-flex; align-items: center; gap: 6px; }
+        .rescan-input input { width: 260px; font-size: 0.8rem; }
+        .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+        .loading-overlay { display: none; position: absolute; inset: 0; background: rgba(255,255,255,0.8); z-index: 10; border-radius: 12px; }
+        .loading-overlay.active { display: flex; align-items: center; justify-content: center; }
+        .step-number { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--pulse-primary); color: white; font-size: 0.8rem; font-weight: 700; margin-right: 8px; }
+        .health-badge { font-size: 0.75rem; }
+        .scan-btn { background: var(--pulse-primary); border-color: var(--pulse-primary); min-width: 160px; }
+        .scan-btn:hover { background: var(--pulse-primary-hover); border-color: var(--pulse-primary-hover); }
+        .repo-count-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 10px; background: #cbd5e1; color: #334155; margin-left: 6px; }
+        .repo-body-wrap { overflow: hidden; transition: max-height 0.35s ease; max-height: 2000px; }
+        .repo-body-wrap.collapsed { max-height: 0; }
+        .collapse-chevron { transition: transform 0.25s; }
+        .collapse-chevron.rotated { transform: rotate(180deg); }
+        /* Auth section */
+        .auth-service-card {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px 16px; border: 1px solid var(--pulse-border);
+            border-radius: 8px; min-width: 280px; flex: 1;
+        }
+        .auth-status-dot {
+            width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+        }
+        .auth-status-dot.connected { background: #22c55e; }
+        .auth-status-dot.disconnected { background: #ef4444; }
+        .auth-status-dot.streaming { background: #f59e0b; animation: auth-pulse 1.5s infinite; }
+        @keyframes auth-pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg border-bottom bg-white">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-activity brand-icon"></i> SonarRepoPulse
+            </a>
+            <div class="d-flex align-items-center gap-3">
+                <span id="health-status" class="badge bg-secondary health-badge">
+                    <i class="bi bi-circle-fill"></i> Checking...
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- SSO Login Modal -->
+    <div class="modal fade" id="authModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title mb-0">
+                        <i class="bi bi-shield-lock"></i>
+                        SSO Authentication — <span id="authModalService"></span>
+                    </h6>
+                </div>
+                <div class="modal-body text-center py-5">
+                    <div class="spinner-border text-primary mb-3" style="width:3rem;height:3rem;" role="status"></div>
+                    <h5>A browser window has opened</h5>
+                    <p class="text-muted mb-1">Please complete the SSO login in the browser window, including any MFA/fingerprint prompts.</p>
+                    <p class="text-muted small">The window will close automatically once login succeeds.</p>
+                    <div class="mt-3">
+                        <span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Waiting for login...</span>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-center">
+                    <button class="btn btn-outline-danger" id="btnAuthCancel">
+                        <i class="bi bi-x-lg"></i> Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container py-4">
+        <!-- Authentication Status -->
+        <div class="card mb-4" id="authSection" style="display:none;">
+            <div class="card-header d-flex align-items-center">
+                <i class="bi bi-shield-lock me-2"></i> Authentication
+            </div>
+            <div class="card-body">
+                <div id="authServices" class="d-flex flex-wrap gap-3"></div>
+            </div>
+        </div>
+
+        <!-- Step 1: Provider Selection -->
+        <div class="card mb-4">
+            <div class="card-header d-flex align-items-center">
+                <span class="step-number">1</span> Select Provider
+            </div>
+            <div class="card-body">
+                <div class="d-flex gap-3" id="providerButtons">
+                    <button class="btn btn-outline-primary provider-btn" data-provider="bitbucket" disabled>
+                        <i class="bi bi-bucket"></i> Bitbucket
+                    </button>
+                    <button class="btn btn-outline-primary provider-btn" data-provider="github" disabled>
+                        <i class="bi bi-github"></i> GitHub
+                    </button>
+                </div>
+                <div id="providerLoading" class="text-muted small mt-2" style="display:none;">
+                    <div class="spinner-border spinner-border-sm" role="status"></div> Loading providers...
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Repository Selection -->
+        <div class="card mb-4" id="repoSection" style="display:none;">
+            <div class="card-header d-flex align-items-center justify-content-between" id="repoHeader" style="cursor:pointer;">
+                <div>
+                    <span class="step-number">2</span> Select Repositories
+                    <span class="badge bg-primary ms-2" id="selectedBadge" style="display:none;"></span>
+                </div>
+                <i class="bi bi-chevron-up collapse-chevron" id="repoCollapseIcon"></i>
+            </div>
+            <div class="repo-body-wrap" id="repoBody">
+                <div class="card-body position-relative">
+                    <div class="loading-overlay" id="repoLoading">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <div class="mt-2 text-muted small">Loading repositories...</div>
+                        </div>
+                    </div>
+                    <!-- Search -->
+                    <div class="input-group mb-3">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="repoSearch" placeholder="Search projects and repos...">
+                        <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <!-- Tree -->
+                    <div class="tree-container" id="repoTree"></div>
+                    <!-- Selection bar -->
+                    <div class="selection-bar" id="selectionBar">
+                        <div>
+                            <span class="badge-count" id="selectedCount">0</span> repos selected
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-secondary" id="btnSelectAll">Select All</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="btnClearAll">Clear All</button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Scan Button inside collapsible area -->
+                <div class="text-center pb-3" id="scanSection">
+                    <button class="btn btn-primary btn-lg scan-btn" id="btnStartScan" disabled>
+                        <i class="bi bi-play-fill"></i> Start Scan
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Progress -->
+        <div class="card mb-4 progress-section" id="progressSection">
+            <div class="card-header d-flex align-items-center">
+                <span class="step-number">3</span> Scan Progress
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span id="progressText" class="text-muted small">Initializing...</span>
+                    <span id="progressPercent" class="fw-bold small">0%</span>
+                </div>
+                <div class="progress" style="height: 10px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" id="progressBar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- close .container -->
+
+    <!-- Step 4: Results — full width for more table space -->
+    <div class="container-fluid px-4 pb-4">
+        <div class="card results-section" id="resultsSection">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="step-number">4</span> Results
+                    <span class="badge bg-secondary ms-2" id="resultCount"></span>
+                </div>
+                <div class="d-flex gap-2" id="downloadButtons"></div>
+            </div>
+            <div class="card-body p-0">
+                <div class="d-flex flex-wrap align-items-center gap-3 px-3 py-2 border-bottom bg-light small text-muted" id="scanInfoBar" style="display:none !important;">
+                    <span><i class="bi bi-clock"></i> <span id="scanStartedAt"></span></span>
+                    <span><i class="bi bi-stopwatch"></i> Duration: <span id="scanDuration" class="fw-semibold"></span></span>
+                    <span><i class="bi bi-collection"></i> Repos: <span id="scanTotalRepos" class="fw-semibold"></span></span>
+                    <span><i class="bi bi-check2-circle text-success"></i> Matched: <span id="scanMatchedCount" class="fw-semibold"></span></span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th>Project</th>
+                                <th>Repository</th>
+                                <th>Coverage</th>
+                                <th>Complexity</th>
+                                <th>Duplication</th>
+                                <th>Violations</th>
+                                <th>NCLOC</th>
+                                <th>Last Scan</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div><!-- close .container-fluid -->
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    const App = {
+        state: {
+            provider: null,
+            availableProviders: [],
+            sonarBaseUrl: null,
+            bitbucketProjects: null,   // [{key, name}] — loaded once
+            bitbucketRepos: {},        // { projectKey: [RepoInfo] } — loaded on expand
+            githubData: null,
+            selectedRepos: new Map(),  // key: "projectKey/slug" -> { slug, project_key, project_name }
+            scanId: null,
+            scanResult: null,
+            pollInterval: null,
+        },
+
+        // ===== AUTH STATE =====
+        authModal: null,
+        authAbort: null,
+
+        // ===== INIT =====
+        async init() {
+            this.bindEvents();
+            document.getElementById('repoHeader').addEventListener('click', () => this.toggleRepoBody());
+            await this.checkHealth();
+            await this.loadAuthStatus();
+            await this.loadProviders();
+        },
+
+        toggleRepoBody() {
+            const body = document.getElementById('repoBody');
+            const icon = document.getElementById('repoCollapseIcon');
+            body.classList.toggle('collapsed');
+            icon.classList.toggle('rotated');
+        },
+
+        collapseRepoBody() {
+            document.getElementById('repoBody').classList.add('collapsed');
+            document.getElementById('repoCollapseIcon').classList.add('rotated');
+        },
+
+        expandRepoBody() {
+            document.getElementById('repoBody').classList.remove('collapsed');
+            document.getElementById('repoCollapseIcon').classList.remove('rotated');
+        },
+
+        bindEvents() {
+            document.querySelectorAll('.provider-btn').forEach(btn => {
+                btn.addEventListener('click', () => this.onProviderChange(btn.dataset.provider));
+            });
+            document.getElementById('repoSearch').addEventListener('input', (e) => this.onSearch(e.target.value));
+            document.getElementById('clearSearch').addEventListener('click', () => {
+                document.getElementById('repoSearch').value = '';
+                this.onSearch('');
+            });
+            document.getElementById('btnSelectAll').addEventListener('click', () => this.onSelectAll());
+            document.getElementById('btnClearAll').addEventListener('click', () => this.onClearAll());
+            document.getElementById('btnStartScan').addEventListener('click', () => this.onStartScan());
+        },
+
+        // ===== API =====
+        api: {
+            async get(url) {
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+                return resp.json();
+            },
+            async post(url, body) {
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+                return resp.json();
+            },
+        },
+
+        // ===== AUTH =====
+        async loadAuthStatus() {
+            try {
+                const data = await this.api.get('/api/v1/auth/status');
+                const browserServices = data.services.filter(s => s.auth_method === 'browser');
+                if (browserServices.length === 0) {
+                    document.getElementById('authSection').style.display = 'none';
+                    return;
+                }
+                document.getElementById('authSection').style.display = 'block';
+                const container = document.getElementById('authServices');
+                container.innerHTML = '';
+                browserServices.forEach(svc => {
+                    const statusClass = svc.authenticating ? 'streaming'
+                        : svc.connected ? 'connected' : 'disconnected';
+                    const statusText = svc.authenticating ? 'Authenticating...'
+                        : svc.connected ? 'Connected' : 'Not connected';
+                    const label = svc.name === 'bitbucket' ? 'Bitbucket' : 'SonarQube';
+                    const icon = svc.name === 'bitbucket' ? 'bi-bucket' : 'bi-shield-check';
+                    const btnHtml = svc.connected
+                        ? `<button class="btn btn-sm btn-outline-success" disabled><i class="bi bi-check-circle"></i> Connected</button>`
+                        : `<button class="btn btn-sm btn-primary" onclick="App.connectService('${svc.name}')"><i class="bi bi-box-arrow-in-right"></i> Connect</button>`;
+                    const div = document.createElement('div');
+                    div.className = 'auth-service-card';
+                    div.innerHTML = `
+                        <div class="auth-status-dot ${statusClass}"></div>
+                        <i class="bi ${icon}" style="font-size:1.2rem;opacity:0.6;"></i>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold">${label}</div>
+                            <div class="text-muted small">${statusText}</div>
+                        </div>
+                        ${btnHtml}`;
+                    container.appendChild(div);
+                });
+            } catch (e) {
+                document.getElementById('authSection').style.display = 'none';
+            }
+        },
+
+        async connectService(service) {
+            const label = service === 'bitbucket' ? 'Bitbucket' : 'SonarQube';
+            document.getElementById('authModalService').textContent = label;
+
+            this.authModal = new bootstrap.Modal(document.getElementById('authModal'));
+            this.authModal.show();
+
+            // Setup cancel button
+            const abortController = new AbortController();
+            this.authAbort = abortController;
+            document.getElementById('btnAuthCancel').onclick = () => {
+                abortController.abort();
+                this.authModal.hide();
+                this.authModal = null;
+                this.showToast('Authentication cancelled', 'warning');
+                this.loadAuthStatus();
+            };
+
+            try {
+                const resp = await fetch(`/api/v1/auth/connect/${service}`, {
+                    method: 'POST',
+                    signal: abortController.signal,
+                });
+                const data = await resp.json();
+
+                if (this.authModal) this.authModal.hide();
+                this.authModal = null;
+
+                if (resp.ok) {
+                    const userInfo = data.user ? ` (user: ${data.user})` : '';
+                    this.showToast(`${label} authentication successful${userInfo}`, 'success');
+                    this.loadAuthStatus();
+                    this.loadProviders();
+                } else {
+                    this.showToast(`${label} auth failed: ${data.detail || 'Unknown error'}`, 'danger');
+                    this.loadAuthStatus();
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') return; // User cancelled
+                if (this.authModal) this.authModal.hide();
+                this.authModal = null;
+                this.showToast(`${label} auth error: ${e.message}`, 'danger');
+                this.loadAuthStatus();
+            }
+        },
+
+        // ===== HEALTH =====
+        async checkHealth() {
+            const el = document.getElementById('health-status');
+            try {
+                const data = await this.api.get('/api/v1/health');
+                el.className = 'badge bg-success health-badge';
+                el.innerHTML = '<i class="bi bi-circle-fill"></i> Healthy';
+            } catch {
+                el.className = 'badge bg-danger health-badge';
+                el.innerHTML = '<i class="bi bi-circle-fill"></i> Offline';
+            }
+        },
+
+        // ===== PROVIDERS =====
+        async loadProviders() {
+            const loading = document.getElementById('providerLoading');
+            loading.style.display = 'block';
+            try {
+                const data = await this.api.get('/api/v1/discovery/providers');
+                this.state.availableProviders = data.providers;
+                this.state.sonarBaseUrl = data.sonar_base_url;
+                document.querySelectorAll('.provider-btn').forEach(btn => {
+                    if (data.providers.includes(btn.dataset.provider)) {
+                        btn.disabled = false;
+                    } else {
+                        btn.disabled = true;
+                        btn.title = 'Not configured';
+                    }
+                });
+            } catch (e) {
+                this.showToast('Failed to load providers: ' + e.message, 'danger');
+            }
+            loading.style.display = 'none';
+        },
+
+        // ===== PROVIDER CHANGE =====
+        async onProviderChange(provider) {
+            this.state.provider = provider;
+            this.state.selectedRepos.clear();
+
+            // Update button states
+            document.querySelectorAll('.provider-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.provider === provider);
+            });
+
+            // Show repo section card and ensure body is expanded
+            document.getElementById('repoSection').style.display = 'block';
+            this.expandRepoBody();
+            document.getElementById('repoSearch').value = '';
+
+            const loading = document.getElementById('repoLoading');
+            loading.classList.add('active');
+
+            try {
+                if (provider === 'bitbucket') {
+                    if (!this.state.bitbucketProjects) {
+                        const data = await this.api.get('/api/v1/discovery/bitbucket/projects');
+                        this.state.bitbucketProjects = data.projects;
+                    }
+                    this.renderBitbucketTree(this.state.bitbucketProjects);
+                } else {
+                    if (!this.state.githubData) {
+                        const data = await this.api.get('/api/v1/discovery/github/orgs');
+                        this.state.githubData = data.orgs;
+                    }
+                    this.renderTree(this.state.githubData, 'github');
+                }
+            } catch (e) {
+                this.showToast('Failed to load: ' + e.message, 'danger');
+            }
+
+            loading.classList.remove('active');
+            this.updateSelectionCount();
+        },
+
+        // ===== BITBUCKET TREE (lazy-load repos per project) =====
+        renderBitbucketTree(projects) {
+            const container = document.getElementById('repoTree');
+            container.innerHTML = '';
+
+            projects.forEach(proj => {
+                const div = document.createElement('div');
+                div.className = 'tree-project';
+                div.dataset.group = proj.key;
+
+                const header = document.createElement('div');
+                header.className = 'tree-project-header';
+                header.innerHTML = `
+                    <i class="bi bi-chevron-right chevron collapsed"></i>
+                    <input type="checkbox" class="form-check-input group-checkbox" data-group="${proj.key}">
+                    <i class="bi bi-folder-fill text-warning"></i>
+                    <span>${proj.name} (${proj.key})</span>
+                    <span class="repo-count-badge" id="count-${proj.key}">click to load</span>
+                `;
+                div.appendChild(header);
+
+                const ul = document.createElement('ul');
+                ul.className = 'tree-repo-list';
+                ul.dataset.group = proj.key;
+                ul.style.display = 'none';
+                div.appendChild(ul);
+                container.appendChild(div);
+
+                let loaded = false;
+
+                // Click header to expand and lazy-load repos
+                header.addEventListener('click', async (e) => {
+                    if (e.target.classList.contains('form-check-input')) return;
+                    const chevron = header.querySelector('.chevron');
+                    const isCollapsed = !chevron.classList.contains('collapsed');
+                    chevron.classList.toggle('collapsed', isCollapsed);
+                    ul.style.display = isCollapsed ? 'none' : 'block';
+
+                    if (!isCollapsed && !loaded) {
+                        await this.loadBitbucketRepos(proj.key, proj.name, ul, header);
+                        loaded = true;
+                    }
+                });
+
+                // Group checkbox: toggle all loaded repos
+                const groupCb = header.querySelector('.group-checkbox');
+                groupCb.addEventListener('change', async () => {
+                    if (!loaded) {
+                        await this.loadBitbucketRepos(proj.key, proj.name, ul, header);
+                        loaded = true;
+                        const chevron = header.querySelector('.chevron');
+                        chevron.classList.remove('collapsed');
+                        ul.style.display = 'block';
+                    }
+                    const checked = groupCb.checked;
+                    ul.querySelectorAll('.repo-checkbox').forEach(cb => {
+                        if (!cb.closest('.tree-repo-item').classList.contains('hidden')) {
+                            cb.checked = checked;
+                            this.toggleRepo(cb, checked);
+                        }
+                    });
+                    this.updateSelectionCount();
+                });
+            });
+        },
+
+        async loadBitbucketRepos(projectKey, projectName, ul, header) {
+            // Show loading indicator
+            const badge = header.querySelector('.repo-count-badge');
+            badge.innerHTML = '<div class="spinner-border spinner-border-sm" style="width:12px;height:12px;"></div>';
+
+            try {
+                if (!this.state.bitbucketRepos[projectKey]) {
+                    const data = await this.api.get(`/api/v1/discovery/bitbucket/projects/${projectKey}/repos`);
+                    this.state.bitbucketRepos[projectKey] = data.repos;
+                }
+
+                const repos = this.state.bitbucketRepos[projectKey];
+                badge.textContent = `${repos.length} repos`;
+                ul.innerHTML = '';
+
+                repos.forEach(repo => {
+                    const repoKey = `${projectKey}/${repo.slug}`;
+                    const li = document.createElement('li');
+                    li.className = 'tree-repo-item';
+                    li.dataset.repo = repoKey;
+                    li.dataset.slug = repo.slug;
+                    li.dataset.search = `${projectName} ${projectKey} ${repo.slug} ${repo.name}`.toLowerCase();
+                    li.innerHTML = `
+                        <input type="checkbox" class="form-check-input repo-checkbox" data-repo="${repoKey}"
+                               data-slug="${repo.slug}" data-project-key="${projectKey}"
+                               data-project-name="${repo.project_name}"
+                               ${this.state.selectedRepos.has(repoKey) ? 'checked' : ''}>
+                        <i class="bi bi-git text-muted"></i>
+                        <span>${repo.slug}</span>
+                    `;
+                    ul.appendChild(li);
+
+                    li.querySelector('.repo-checkbox').addEventListener('change', (e) => {
+                        this.toggleRepo(e.target, e.target.checked);
+                        this.updateGroupCheckbox(projectKey);
+                        this.updateSelectionCount();
+                    });
+                });
+
+                this.updateGroupCheckbox(projectKey);
+            } catch (e) {
+                badge.textContent = 'error';
+                badge.classList.add('text-danger');
+                this.showToast(`Failed to load repos for ${projectKey}: ${e.message}`, 'danger');
+            }
+        },
+
+        // ===== GITHUB TREE (all repos loaded upfront) =====
+        renderTree(groups, mode) {
+            const container = document.getElementById('repoTree');
+            container.innerHTML = '';
+
+            groups.forEach(group => {
+                const groupKey = group.name;
+                const groupName = group.name;
+                const repos = group.repos || [];
+
+                const div = document.createElement('div');
+                div.className = 'tree-project';
+                div.dataset.group = groupKey;
+
+                const header = document.createElement('div');
+                header.className = 'tree-project-header';
+                header.innerHTML = `
+                    <i class="bi bi-chevron-down chevron"></i>
+                    <input type="checkbox" class="form-check-input group-checkbox" data-group="${groupKey}">
+                    <i class="bi bi-github"></i>
+                    <span>${groupName}</span>
+                    <span class="repo-count-badge">${repos.length} repos</span>
+                `;
+                div.appendChild(header);
+
+                const ul = document.createElement('ul');
+                ul.className = 'tree-repo-list';
+                ul.dataset.group = groupKey;
+
+                repos.forEach(repo => {
+                    const repoKey = `${groupKey}/${repo.slug}`;
+                    const li = document.createElement('li');
+                    li.className = 'tree-repo-item';
+                    li.dataset.repo = repoKey;
+                    li.dataset.slug = repo.slug;
+                    li.dataset.search = `${groupName} ${repo.slug} ${repo.name}`.toLowerCase();
+                    li.innerHTML = `
+                        <input type="checkbox" class="form-check-input repo-checkbox" data-repo="${repoKey}"
+                               data-slug="${repo.slug}" data-project-key="${groupKey}"
+                               data-project-name="${repo.project_name}">
+                        <i class="bi bi-git text-muted"></i>
+                        <span>${repo.slug}</span>
+                    `;
+                    ul.appendChild(li);
+                });
+
+                div.appendChild(ul);
+                container.appendChild(div);
+
+                header.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('form-check-input')) return;
+                    const chevron = header.querySelector('.chevron');
+                    const isCollapsed = chevron.classList.toggle('collapsed');
+                    ul.style.display = isCollapsed ? 'none' : 'block';
+                });
+
+                const groupCb = header.querySelector('.group-checkbox');
+                groupCb.addEventListener('change', () => {
+                    const checked = groupCb.checked;
+                    ul.querySelectorAll('.repo-checkbox').forEach(cb => {
+                        if (!cb.closest('.tree-repo-item').classList.contains('hidden')) {
+                            cb.checked = checked;
+                            this.toggleRepo(cb, checked);
+                        }
+                    });
+                    this.updateSelectionCount();
+                });
+            });
+
+            container.querySelectorAll('.repo-checkbox').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    this.toggleRepo(cb, cb.checked);
+                    this.updateGroupCheckbox(cb.dataset.projectKey);
+                    this.updateSelectionCount();
+                });
+            });
+        },
+
+        toggleRepo(cb, checked) {
+            const key = cb.dataset.repo;
+            if (checked) {
+                this.state.selectedRepos.set(key, {
+                    slug: cb.dataset.slug,
+                    project_key: cb.dataset.projectKey,
+                    project_name: cb.dataset.projectName,
+                });
+            } else {
+                this.state.selectedRepos.delete(key);
+            }
+        },
+
+        updateGroupCheckbox(groupKey) {
+            const container = document.getElementById('repoTree');
+            const groupDiv = container.querySelector(`.tree-project[data-group="${groupKey}"]`);
+            if (!groupDiv) return;
+            const groupCb = groupDiv.querySelector('.group-checkbox');
+            const repoCbs = groupDiv.querySelectorAll('.repo-checkbox:not(.hidden)');
+            const checked = Array.from(repoCbs).filter(cb => cb.checked).length;
+            groupCb.checked = checked === repoCbs.length && repoCbs.length > 0;
+            groupCb.indeterminate = checked > 0 && checked < repoCbs.length;
+        },
+
+        updateSelectionCount() {
+            const count = this.state.selectedRepos.size;
+            document.getElementById('selectedCount').textContent = count;
+            document.getElementById('btnStartScan').disabled = count === 0;
+            // Update badge in card header (visible when collapsed)
+            const badge = document.getElementById('selectedBadge');
+            if (count > 0) {
+                badge.textContent = `${count} selected`;
+                badge.style.display = '';
+            } else {
+                badge.style.display = 'none';
+            }
+        },
+
+        // ===== SEARCH =====
+        onSearch(term) {
+            const lower = term.toLowerCase().trim();
+            const container = document.getElementById('repoTree');
+
+            container.querySelectorAll('.tree-project').forEach(projectDiv => {
+                const repoItems = projectDiv.querySelectorAll('.tree-repo-item');
+                let visibleCount = 0;
+
+                repoItems.forEach(item => {
+                    const match = !lower || item.dataset.search.includes(lower);
+                    item.classList.toggle('hidden', !match);
+                    if (match) visibleCount++;
+                });
+
+                // Show project if any repo matches or project name matches
+                const headerText = projectDiv.querySelector('.tree-project-header span').textContent.toLowerCase();
+                const projectMatch = !lower || headerText.includes(lower);
+
+                if (projectMatch && !lower) {
+                    // No filter: show everything
+                    repoItems.forEach(item => item.classList.remove('hidden'));
+                    projectDiv.classList.remove('hidden');
+                } else if (visibleCount > 0 || projectMatch) {
+                    projectDiv.classList.remove('hidden');
+                    if (projectMatch && visibleCount === 0) {
+                        repoItems.forEach(item => item.classList.remove('hidden'));
+                    }
+                    // Auto-expand when searching
+                    const chevron = projectDiv.querySelector('.chevron');
+                    const ul = projectDiv.querySelector('.tree-repo-list');
+                    if (lower) {
+                        chevron.classList.remove('collapsed');
+                        ul.style.display = 'block';
+                    }
+                } else {
+                    projectDiv.classList.add('hidden');
+                }
+            });
+        },
+
+        // ===== SELECT ALL / CLEAR ALL =====
+        onSelectAll() {
+            document.getElementById('repoTree').querySelectorAll('.tree-repo-item:not(.hidden) .repo-checkbox').forEach(cb => {
+                cb.checked = true;
+                this.toggleRepo(cb, true);
+            });
+            document.getElementById('repoTree').querySelectorAll('.group-checkbox').forEach(cb => {
+                cb.checked = true;
+                cb.indeterminate = false;
+            });
+            this.updateSelectionCount();
+        },
+
+        onClearAll() {
+            document.getElementById('repoTree').querySelectorAll('.repo-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+            document.getElementById('repoTree').querySelectorAll('.group-checkbox').forEach(cb => {
+                cb.checked = false;
+                cb.indeterminate = false;
+            });
+            this.state.selectedRepos.clear();
+            this.updateSelectionCount();
+        },
+
+        // ===== START SCAN =====
+        async onStartScan() {
+            const provider = this.state.provider;
+            const selected = this.state.selectedRepos;
+            if (selected.size === 0) return;
+
+            // Build request payload
+            const projectKeys = new Set();
+            const repoSlugs = [];
+            selected.forEach((info) => {
+                projectKeys.add(info.project_key);
+                repoSlugs.push(info.slug);
+            });
+
+            const payload = {
+                providers: [provider],
+                repositories: repoSlugs,
+                formats: ['csv', 'excel'],
+            };
+
+            if (provider === 'bitbucket') {
+                payload.bitbucket_projects = Array.from(projectKeys);
+            } else {
+                payload.github_orgs = Array.from(projectKeys);
+            }
+
+            // Collapse repo selection card body (card stays visible)
+            this.collapseRepoBody();
+
+            // Disable scan button
+            const btn = document.getElementById('btnStartScan');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Starting...';
+
+            // Show progress
+            const progressSection = document.getElementById('progressSection');
+            progressSection.classList.add('active');
+            document.getElementById('resultsSection').classList.remove('active');
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressText').textContent = 'Starting scan...';
+            document.getElementById('progressPercent').textContent = '0%';
+
+            try {
+                const result = await this.api.post('/api/v1/scan', payload);
+                this.state.scanId = result.scan_id;
+                this.startPolling(result.scan_id);
+            } catch (e) {
+                this.showToast('Failed to start scan: ' + e.message, 'danger');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-play-fill"></i> Start Scan';
+                progressSection.classList.remove('active');
+                // Re-expand repo selection on failure
+                this.expandRepoBody();
+            }
+        },
+
+        // ===== POLLING =====
+        startPolling(scanId) {
+            const poll = async () => {
+                try {
+                    const result = await this.api.get(`/api/v1/scan/${scanId}`);
+                    this.updateProgress(result);
+
+                    if (result.status === 'completed') {
+                        clearInterval(this.state.pollInterval);
+                        this.state.scanResult = result;
+                        // Collapse progress, show results
+                        document.getElementById('progressSection').classList.remove('active');
+                        this.renderResults(result);
+                        this.resetScanButton();
+                    } else if (result.status === 'failed') {
+                        clearInterval(this.state.pollInterval);
+                        this.showToast('Scan failed: ' + (result.error || 'Unknown error'), 'danger');
+                        this.resetScanButton();
+                        document.getElementById('progressSection').classList.remove('active');
+                        // Re-expand repo selection on failure
+                        this.expandRepoBody();
+                    }
+                } catch (e) {
+                    // Network error, keep polling
+                }
+            };
+            poll();
+            this.state.pollInterval = setInterval(poll, 2000);
+        },
+
+        updateProgress(result) {
+            const total = result.total_repos || 0;
+            const processed = result.processed_repos || 0;
+            const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
+
+            document.getElementById('progressBar').style.width = pct + '%';
+            document.getElementById('progressPercent').textContent = pct + '%';
+
+            if (result.status === 'running') {
+                document.getElementById('progressText').textContent =
+                    `Scanning... ${processed}/${total} repos`;
+            } else if (result.status === 'completed') {
+                document.getElementById('progressText').textContent =
+                    `Completed: ${total} repos processed`;
+                document.getElementById('progressBar').classList.remove('progress-bar-animated');
+            }
+        },
+
+        resetScanButton() {
+            const btn = document.getElementById('btnStartScan');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-fill"></i> Start Scan';
+        },
+
+        // ===== RESULTS =====
+        renderResults(result) {
+            const section = document.getElementById('resultsSection');
+            section.classList.add('active');
+            document.getElementById('resultCount').textContent = `${result.metrics.length} repos`;
+
+            // Populate scan info bar
+            const infoBar = document.getElementById('scanInfoBar');
+            infoBar.style.display = '';
+            infoBar.classList.add('d-flex');
+            infoBar.style.cssText = '';
+
+            if (result.started_at) {
+                const started = new Date(result.started_at);
+                document.getElementById('scanStartedAt').textContent = started.toLocaleString();
+            }
+
+            if (result.started_at && result.completed_at) {
+                const start = new Date(result.started_at);
+                const end = new Date(result.completed_at);
+                const durationSec = Math.round((end - start) / 1000);
+                const mins = Math.floor(durationSec / 60);
+                const secs = durationSec % 60;
+                document.getElementById('scanDuration').textContent =
+                    mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+            }
+
+            document.getElementById('scanTotalRepos').textContent = result.total_repos || result.metrics.length;
+            const matched = result.metrics.filter(m => m.sonar_project_key && !m.error).length;
+            document.getElementById('scanMatchedCount').textContent = `${matched}/${result.metrics.length}`;
+
+            // Download buttons
+            const downloadDiv = document.getElementById('downloadButtons');
+            downloadDiv.innerHTML = '';
+            if (result.report_ids && result.report_ids.length > 0) {
+                result.report_ids.forEach(async (id) => {
+                    try {
+                        const reports = await this.api.get('/api/v1/reports');
+                        const report = reports.find(r => r.report_id === id);
+                        if (report) {
+                            const ext = report.format === 'excel' ? 'xlsx' : 'csv';
+                            const icon = report.format === 'excel' ? 'bi-file-earmark-excel' : 'bi-filetype-csv';
+                            const btnClass = report.format === 'excel' ? 'btn-success' : 'btn-outline-success';
+                            const btn = document.createElement('a');
+                            btn.href = `/api/v1/reports/${id}/download`;
+                            btn.className = `btn btn-sm ${btnClass}`;
+                            btn.innerHTML = `<i class="bi ${icon}"></i> ${ext.toUpperCase()}`;
+                            downloadDiv.appendChild(btn);
+                        }
+                    } catch {}
+                });
+            }
+
+            // Results table
+            const tbody = document.getElementById('resultsBody');
+            tbody.innerHTML = '';
+
+            result.metrics.forEach((m, idx) => {
+                const tr = document.createElement('tr');
+                tr.id = `result-row-${idx}`;
+                tr.innerHTML = this.buildResultRow(m, idx);
+                tbody.appendChild(tr);
+            });
+        },
+
+        buildResultRow(m, idx) {
+            const hasSonar = !!m.sonar_project_key;
+            const hasMetrics = m.coverage !== null && m.coverage !== undefined;
+            const noSonar = !hasSonar && m.error && m.error.includes('No Sonar');
+
+            // Coverage badge
+            let coverageBadge = '--';
+            if (m.coverage !== null && m.coverage !== undefined) {
+                const cls = m.coverage >= 80 ? 'badge-coverage-high'
+                          : m.coverage >= 50 ? 'badge-coverage-mid'
+                          : 'badge-coverage-low';
+                coverageBadge = `<span class="badge ${cls}">${m.coverage}%</span>`;
+            }
+
+            // Violations badge
+            let violationsBadge = '--';
+            if (m.high_risk_violations !== null && m.high_risk_violations !== undefined) {
+                const cls = m.high_risk_violations > 0 ? 'bg-danger' : 'bg-success';
+                violationsBadge = `<span class="badge ${cls}">${m.high_risk_violations}</span>`;
+            }
+
+            // Status
+            let status = '';
+            if (hasMetrics) {
+                status = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> OK</span>';
+            } else if (noSonar) {
+                status = '<span class="badge badge-no-sonar"><i class="bi bi-question-circle"></i> No Sonar</span>';
+            } else if (m.error) {
+                status = `<span class="badge bg-warning text-dark" title="${this.escapeHtml(m.error)}"><i class="bi bi-exclamation-triangle"></i> Error</span>`;
+            } else if (hasSonar) {
+                status = '<span class="badge bg-info">No Analysis</span>';
+            }
+
+            // Actions
+            let actions = '';
+            if (noSonar) {
+                actions = `<button class="btn btn-sm btn-outline-primary" onclick="App.showRescanInput(${idx}, '${this.escapeHtml(m.repository)}', '${this.escapeHtml(m.project)}')">
+                    <i class="bi bi-pencil-square"></i> Enter Key
+                </button>`;
+            }
+
+            // Last analysis date
+            let lastScan = '--';
+            if (m.last_analysis_date) {
+                const d = new Date(m.last_analysis_date);
+                lastScan = `<span class="text-nowrap" title="${d.toLocaleString()}">${d.toLocaleDateString()}</span>`;
+            }
+
+            // Project name — hyperlink to SonarQube if matched
+            let projectCell = this.escapeHtml(m.project);
+            if (hasSonar && this.state.sonarBaseUrl) {
+                const a = document.createElement('a');
+                a.href = this.state.sonarBaseUrl + '/dashboard?id=' + encodeURIComponent(m.sonar_project_key);
+                a.target = '_blank';
+                a.rel = 'noopener';
+                a.title = m.sonar_project_key;
+                a.innerHTML = this.escapeHtml(m.project) + ' <i class="bi bi-box-arrow-up-right" style="font-size:0.65rem;opacity:0.5;"></i>';
+                projectCell = a.outerHTML;
+            }
+
+            return `
+                <td>${projectCell}</td>
+                <td><code>${this.escapeHtml(m.repository)}</code></td>
+                <td>${coverageBadge}</td>
+                <td>${m.complexity !== null && m.complexity !== undefined ? m.complexity : '--'}</td>
+                <td>${m.duplication !== null && m.duplication !== undefined ? m.duplication + '%' : '--'}</td>
+                <td>${violationsBadge}</td>
+                <td>${m.ncloc !== null && m.ncloc !== undefined ? m.ncloc.toLocaleString() : '--'}</td>
+                <td class="small">${lastScan}</td>
+                <td>${status}</td>
+                <td class="actions-cell" id="actions-${idx}">${actions}</td>
+            `;
+        },
+
+        // ===== INLINE RESCAN =====
+        showRescanInput(idx, repoSlug, projectKey) {
+            const cell = document.getElementById(`actions-${idx}`);
+            cell.innerHTML = `
+                <div class="rescan-input">
+                    <input type="text" class="form-control form-control-sm" id="sonar-key-${idx}"
+                           placeholder="e.g. com.org:project-key">
+                    <button class="btn btn-sm btn-primary" onclick="App.submitRescan(${idx}, '${repoSlug}', '${projectKey}')">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="App.cancelRescan(${idx}, '${repoSlug}', '${projectKey}')">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            `;
+            document.getElementById(`sonar-key-${idx}`).focus();
+        },
+
+        cancelRescan(idx, repoSlug, projectKey) {
+            const cell = document.getElementById(`actions-${idx}`);
+            cell.innerHTML = `<button class="btn btn-sm btn-outline-primary" onclick="App.showRescanInput(${idx}, '${this.escapeHtml(repoSlug)}', '${this.escapeHtml(projectKey)}')">
+                <i class="bi bi-pencil-square"></i> Enter Key
+            </button>`;
+        },
+
+        async submitRescan(idx, repoSlug, projectKey) {
+            const input = document.getElementById(`sonar-key-${idx}`);
+            const sonarKey = input.value.trim();
+            if (!sonarKey) {
+                input.classList.add('is-invalid');
+                return;
+            }
+
+            const cell = document.getElementById(`actions-${idx}`);
+            cell.innerHTML = '<div class="spinner-border spinner-border-sm text-primary"></div>';
+
+            try {
+                const result = await this.api.post('/api/v1/scan/rescan-repo', {
+                    provider: this.state.provider,
+                    project_key: projectKey,
+                    repo_slug: repoSlug,
+                    sonar_project_key: sonarKey,
+                });
+
+                // Update the row in-place
+                const tr = document.getElementById(`result-row-${idx}`);
+                tr.innerHTML = this.buildResultRow(result, idx);
+
+                // Flash green
+                tr.style.transition = 'background 0.3s';
+                tr.style.background = '#dcfce7';
+                setTimeout(() => { tr.style.background = ''; }, 1500);
+
+                this.showToast(`Re-scanned ${repoSlug} successfully`, 'success');
+            } catch (e) {
+                cell.innerHTML = `<span class="text-danger small">${e.message}</span>`;
+                this.showToast('Re-scan failed: ' + e.message, 'danger');
+            }
+        },
+
+        // ===== TOASTS =====
+        showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const id = 'toast-' + Date.now();
+            const bgClass = { success: 'bg-success', danger: 'bg-danger', warning: 'bg-warning', info: 'bg-info' }[type] || 'bg-info';
+            const html = `
+                <div id="${id}" class="toast align-items-center text-white ${bgClass} border-0" role="alert">
+                    <div class="d-flex">
+                        <div class="toast-body">${this.escapeHtml(message)}</div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', html);
+            const el = document.getElementById(id);
+            const toast = new bootstrap.Toast(el, { delay: 5000 });
+            toast.show();
+            el.addEventListener('hidden.bs.toast', () => el.remove());
+        },
+
+        // ===== UTILS =====
+        escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        },
+
+
+
+    };
+
+    document.addEventListener('DOMContentLoaded', () => App.init());
+    </script>
+</body>
+</html>

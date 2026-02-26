@@ -1,0 +1,40 @@
+# SCM provider configurations
+scm:
+  bitbucket:
+    base_url: "https://bitbucket.your-company.com"
+    projects:
+      - key: "PROJ1"
+        name: "Project One"
+
+  github:
+    organizations:
+      - name: "your-github-org"
+
+# SonarQube configuration
+sonar:
+  base_url: "https://sonarqube.your-company.com"
+  # organization: "my-sonar-org"  # Only needed for SonarCloud, omit for self-hosted SonarQube
+  branches:
+    - "main"
+    - "master"
+
+# Report output settings
+reports:
+  output_dir: "./reports"
+  formats:
+    - "csv"
+    - "excel"
+
+# Scheduler configuration
+scheduler:
+  enabled: false
+  jobs:
+    - name: "full_scan"
+      cron: "0 2 * * 1"    # Every Monday at 2:00 AM
+      providers:
+        - "bitbucket"
+        - "github"
+    - name: "daily_scan"
+      cron: "0 6 * * *"    # Daily at 6:00 AM
+      providers:
+        - "bitbucket"

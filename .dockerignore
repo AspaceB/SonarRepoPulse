@@ -1,0 +1,15 @@
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.git/
+.gitignore
+.claude/
+.dockerignore
+Dockerfile
+docker-compose.yml
+README.md
+.env.example
+reports/*.csv
+reports/*.xlsx

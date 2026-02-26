@@ -1,0 +1,13 @@
+# Manual mapping: SCM repo identifier -> Sonar project key
+# Used as fallback when automatic Sonar search fails to find a match.
+#
+# Key format: "{workspace_or_org}/{repo_slug}"
+# Value: Sonar project key
+mappings:
+  # Bitbucket examples
+  # "my-workspace/my-repo": "my-sonar-org_my-repo"
+  # "my-workspace/legacy-app": "my-sonar-org_legacy-app-renamed"
+
+  # GitHub examples
+  # "my-github-org/api-service": "my-sonar-org_api-service"
+  # "my-github-org/old-naming": "custom-sonar-key-for-old-naming"
